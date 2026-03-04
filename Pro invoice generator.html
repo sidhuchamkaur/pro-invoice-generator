@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Invoice Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #a0aec0; /* Lighter scrollbar */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+        /* Ensure input fields in the preview are not editable */
+        #invoice-preview input,
+        #invoice-preview textarea {
+            pointer-events: none;
+            border: none;
+            background: transparent;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        #invoice-preview textarea {
+            resize: none;
+        }
+        .editor-section {
+            transition: all 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="flex flex-col lg:flex-row min-h-screen">
+        <!-- Editor/Controls Column -->
+        <div id="editor" class="w-full lg:w-1/2 bg-white p-6 space-y-6 overflow-y-auto">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-800">Invoice Generator</h1>
+                <div class="space-x-2">
+                    <button id="download-pdf" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200">Download PDF</button>
+                    <button id="download-doc" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200">Download DOC</button>
+                </div>
+            </div>
+
+            <!-- Business & Client Details -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- From Section -->
+                <div class="editor-section bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h2 class="text-xl font-semibold mb-3 border-b border-blue-200 pb-2 text-blue-800">From</h2>
+                    <div class="space-y-2">
+                        <input type="text" id="from-name" placeholder="Your Company" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                        <textarea id="from-address" placeholder="Your Address" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500" rows="3"></textarea>
+                        <div>
+                            <label for="logo-upload" class="w-full inline-block text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-4 rounded-lg cursor-pointer text-center">
+                                Choose Logo Image
+                            </label>
+                            <input type="file" id="logo-upload" class="hidden">
+                            <span id="logo-file-name" class="text-xs text-gray-500 mt-1 block truncate"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- To Section -->
+                <div class="editor-section bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h2 class="text-xl font-semibold mb-3 border-b border-blue-200 pb-2 text-blue-800">To</h2>
+                    <div class="space-y-2">
+                        <input type="text" id="to-name" placeholder="Client's Name" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                        <textarea id="to-address" placeholder="Client's Address" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invoice Details -->
+            <div class="editor-section bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h2 class="text-xl font-semibold mb-3 border-b border-blue-200 pb-2 text-blue-800">Invoice Details</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input type="text" id="invoice-id" placeholder="Invoice #" value="INV-001" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                    <input type="date" id="invoice-date" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                    <input type="date" id="invoice-due-date" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="editor-section bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h2 class="text-xl font-semibold mb-3 border-b border-blue-200 pb-2 text-blue-800">Items</h2>
+                <div id="items-editor-container" class="space-y-3">
+                    <!-- Item rows will be dynamically added here -->
+                </div>
+                <button id="add-item" class="mt-4 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200">+ Add Item</button>
+            </div>
+
+            <!-- Totals Section -->
+            <div class="editor-section bg-blue-50 p-4 rounded-lg border border-blue-200">
+                 <h2 class="text-xl font-semibold mb-3 border-b border-blue-200 pb-2 text-blue-800">Summary</h2>
+                 <div class="space-y-3">
+                     <div class="flex justify-between items-center">
+                         <label for="tax-rate" class="font-medium text-gray-700">Tax Rate (%)</label>
+                         <input type="number" id="tax-rate" value="10" min="0" class="w-24 p-2 border rounded-md text-right border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                     </div>
+                      <div class="flex justify-between items-center">
+                         <label for="discount-rate" class="font-medium text-gray-700">Discount (%)</label>
+                         <input type="number" id="discount-rate" value="5" min="0" class="w-24 p-2 border rounded-md text-right border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                     </div>
+                 </div>
+            </div>
+            
+            <!-- Notes Section -->
+            <div class="editor-section bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h2 class="text-xl font-semibold mb-3 border-b border-blue-200 pb-2 text-blue-800">Notes / Terms</h2>
+                <textarea id="notes" class="w-full p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500" rows="4" placeholder="e.g., Payment is due within 30 days."></textarea>
+            </div>
+        </div>
+
+        <!-- Preview Column -->
+        <div class="w-full lg:w-1/2 p-6 flex items-center justify-center bg-slate-200">
+            <div id="invoice-preview-wrapper" class="w-full max-w-2xl bg-white shadow-2xl rounded-lg overflow-hidden transform scale-90 lg:scale-100 origin-top">
+                <div id="invoice-preview" class="p-10 relative">
+                    <!-- Graphic Element -->
+                    <div class="absolute top-0 right-0 h-48 w-48 bg-blue-100 rounded-bl-full"></div>
+                    
+                    <!-- Invoice Header -->
+                    <div class="flex justify-between items-start pb-8 border-b border-gray-200 relative z-10">
+                        <div class="w-2/3">
+                            <img id="logo-preview" src="https://placehold.co/200x80/e2e8f0/e2e8f0?text=+" alt="Company Logo" class="h-16 mb-4 object-contain">
+                            <h1 id="preview-from-name" class="text-2xl font-bold text-gray-800">Your Company</h1>
+                            <p id="preview-from-address" class="text-gray-600 whitespace-pre-wrap">Your Address</p>
+                        </div>
+                        <div class="text-right w-1/3">
+                            <h2 class="text-4xl font-bold text-gray-700 uppercase">Invoice</h2>
+                            <p class="text-gray-500"># <span id="preview-invoice-id">INV-001</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Client and Date Info -->
+                    <div class="flex justify-between mt-8">
+                        <div>
+                            <p class="font-semibold text-gray-500">Bill To:</p>
+                            <h3 id="preview-to-name" class="text-xl font-bold text-gray-800">Client's Name</h3>
+                            <p id="preview-to-address" class="text-gray-600 whitespace-pre-wrap">Client's Address</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-semibold text-gray-500">Date:</p>
+                            <p id="preview-invoice-date" class="text-gray-800">-</p>
+                            <p class="font-semibold text-gray-500 mt-2">Due Date:</p>
+                            <p id="preview-invoice-due-date" class="text-gray-800">-</p>
+                        </div>
+                    </div>
+
+                    <!-- Items Table -->
+                    <div class="mt-10">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-blue-700 text-white">
+                                    <th class="p-3 font-semibold rounded-tl-lg w-1/2">Description</th>
+                                    <th class="p-3 font-semibold text-center">Qty</th>
+                                    <th class="p-3 font-semibold text-right">Rate</th>
+                                    <th class="p-3 font-semibold text-right rounded-tr-lg">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="preview-items-container">
+                                <!-- Preview items will be dynamically added here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Totals -->
+                    <div class="flex justify-end mt-8">
+                        <div class="w-full max-w-xs space-y-3">
+                            <div class="flex justify-between text-gray-700">
+                                <span>Subtotal</span>
+                                <span id="preview-subtotal">$0.00</span>
+                            </div>
+                             <div class="flex justify-between text-gray-700">
+                                <span>Discount (<span id="preview-discount-rate-text">5</span>%)</span>
+                                <span id="preview-discount-amount">-$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-gray-700">
+                                <span>Tax (<span id="preview-tax-rate-text">10</span>%)</span>
+                                <span id="preview-tax-amount">$0.00</span>
+                            </div>
+                           
+                            <div class="flex justify-between text-2xl font-bold text-gray-800 border-t-2 border-blue-500 pt-3 mt-3">
+                                <span>Total</span>
+                                <span id="preview-total">$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Notes -->
+                    <div class="mt-12">
+                        <h4 class="text-lg font-semibold text-gray-800">Notes</h4>
+                        <p id="preview-notes" class="text-gray-600 mt-2 text-sm whitespace-pre-wrap">e.g., Payment is due within 30 days.</p>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div class="mt-16 text-center text-xs text-gray-400 border-t pt-4">
+                        <p>Thank you for your business!</p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- ELEMENTS ---
+            const editorContainer = document.getElementById('editor');
+            const itemsEditorContainer = document.getElementById('items-editor-container');
+            const previewItemsContainer = document.getElementById('preview-items-container');
+            const addItemBtn = document.getElementById('add-item');
+            const downloadPdfBtn = document.getElementById('download-pdf');
+            const downloadDocBtn = document.getElementById('download-doc');
+            
+            let itemCounter = 0;
+
+            // --- FUNCTIONS ---
+
+            // Function to add a new item row to the editor
+            const createItemEditorRow = (id) => {
+                const itemRow = document.createElement('div');
+                itemRow.className = 'grid grid-cols-12 gap-2 items-center';
+                itemRow.dataset.id = id;
+                itemRow.innerHTML = `
+                    <input type="text" data-field="description" placeholder="Item description" class="col-span-6 p-2 border rounded-md border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                    <input type="number" data-field="quantity" placeholder="1" value="1" min="1" class="col-span-2 p-2 border rounded-md text-center border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                    <input type="number" data-field="rate" placeholder="0.00" value="0.00" min="0" step="0.01" class="col-span-2 p-2 border rounded-md text-right border-blue-200 focus:ring-blue-500 focus:border-blue-500">
+                    <div class="col-span-1 text-right font-medium text-gray-600" data-field="total">$0.00</div>
+                    <button class="col-span-1 remove-item text-red-500 hover:text-red-700 font-bold text-2xl leading-none">&times;</button>
+                `;
+                itemsEditorContainer.appendChild(itemRow);
+            };
+
+            // Function to add a corresponding item row to the preview
+            const createItemPreviewRow = (id) => {
+                const itemRow = document.createElement('tr');
+                itemRow.dataset.id = id;
+                itemRow.className = 'border-b border-gray-100';
+                itemRow.innerHTML = `
+                    <td class="p-3" data-field="description">Item description</td>
+                    <td class="p-3 text-center" data-field="quantity">1</td>
+                    <td class="p-3 text-right" data-field="rate">$0.00</td>
+                    <td class="p-3 text-right font-semibold" data-field="total">$0.00</td>
+                `;
+                previewItemsContainer.appendChild(itemRow);
+            };
+
+            // Add an initial item
+            const addInitialItem = () => {
+                itemCounter++;
+                createItemEditorRow(itemCounter);
+                createItemPreviewRow(itemCounter);
+            };
+
+            // Function to format currency
+            const formatCurrency = (amount) => {
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+            };
+            
+            // The main function to update the preview based on editor inputs
+            const updatePreview = () => {
+                // Update simple text/textarea fields
+                const fieldsToUpdate = {
+                    '#from-name': '#preview-from-name', '#from-address': '#preview-from-address',
+                    '#to-name': '#preview-to-name', '#to-address': '#preview-to-address',
+                    '#invoice-id': 'span#preview-invoice-id', '#notes': '#preview-notes',
+                };
+
+                for (const editorId in fieldsToUpdate) {
+                    const value = document.querySelector(editorId).value;
+                    document.querySelector(fieldsToUpdate[editorId]).textContent = value;
+                }
+
+                // Update date fields
+                const dateFields = { '#invoice-date': '#preview-invoice-date', '#invoice-due-date': '#preview-invoice-due-date' };
+                for (const editorId in dateFields) {
+                    const dateValue = document.querySelector(editorId).value;
+                    document.querySelector(dateFields[editorId]).textContent = dateValue ? new Date(dateValue).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
+                }
+
+                // Update items and calculate totals
+                let subtotal = 0;
+                document.querySelectorAll('#items-editor-container .grid').forEach(editorRow => {
+                    const id = editorRow.dataset.id;
+                    const previewRow = document.querySelector(`#preview-items-container tr[data-id='${id}']`);
+                    if (!previewRow) return;
+
+                    const description = editorRow.querySelector('[data-field="description"]').value;
+                    const quantity = parseFloat(editorRow.querySelector('[data-field="quantity"]').value) || 0;
+                    const rate = parseFloat(editorRow.querySelector('[data-field="rate"]').value) || 0;
+                    const total = quantity * rate;
+                    subtotal += total;
+
+                    // Update editor row total
+                    editorRow.querySelector('[data-field="total"]').textContent = formatCurrency(total);
+                    
+                    // Update preview row
+                    previewRow.querySelector('[data-field="description"]').textContent = description;
+                    previewRow.querySelector('[data-field="quantity"]').textContent = quantity;
+                    previewRow.querySelector('[data-field="rate"]').textContent = formatCurrency(rate);
+                    previewRow.querySelector('[data-field="total"]').textContent = formatCurrency(total);
+                });
+
+                // Update summary/totals
+                const taxRate = parseFloat(document.getElementById('tax-rate').value) || 0;
+                const discountRate = parseFloat(document.getElementById('discount-rate').value) || 0;
+
+                const discountAmount = subtotal * (discountRate / 100);
+                const subtotalAfterDiscount = subtotal - discountAmount;
+                const taxAmount = subtotalAfterDiscount * (taxRate / 100);
+                const finalTotal = subtotalAfterDiscount + taxAmount;
+
+                document.getElementById('preview-subtotal').textContent = formatCurrency(subtotal);
+                document.getElementById('preview-tax-rate-text').textContent = taxRate;
+                document.getElementById('preview-tax-amount').textContent = formatCurrency(taxAmount);
+                document.getElementById('preview-discount-rate-text').textContent = discountRate;
+                document.getElementById('preview-discount-amount').textContent = `-${formatCurrency(discountAmount)}`;
+                document.getElementById('preview-total').textContent = formatCurrency(finalTotal);
+            };
+
+            // --- EVENT LISTENERS ---
+
+            // Update preview on any input change in the editor
+            editorContainer.addEventListener('input', updatePreview);
+
+            // Add new item
+            addItemBtn.addEventListener('click', () => {
+                itemCounter++;
+                createItemEditorRow(itemCounter);
+                createItemPreviewRow(itemCounter);
+            });
+
+            // Remove item
+            itemsEditorContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-item')) {
+                    const row = e.target.closest('.grid');
+                    const id = row.dataset.id;
+                    const previewRow = document.querySelector(`#preview-items-container tr[data-id='${id}']`);
+                    
+                    row.remove();
+                    if (previewRow) previewRow.remove();
+                    updatePreview(); // Recalculate totals
+                }
+            });
+
+            // Logo upload
+            document.getElementById('logo-upload').addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        document.getElementById('logo-preview').src = event.target.result;
+                    }
+                    reader.readAsDataURL(e.target.files[0]);
+                    document.getElementById('logo-file-name').textContent = e.target.files[0].name;
+                } else {
+                    document.getElementById('logo-file-name').textContent = '';
+                }
+            });
+
+            // Download PDF
+            downloadPdfBtn.addEventListener('click', () => {
+                const invoicePreview = document.getElementById('invoice-preview-wrapper');
+                const invoiceId = document.getElementById('invoice-id').value || 'invoice';
+                
+                html2canvas(invoicePreview, {
+                    scale: 3, // Higher scale for better quality
+                    useCORS: true 
+                }).then(canvas => {
+                    const imgData = canvas.toDataURL('image/png');
+                    const { jsPDF } = window.jspdf;
+                    
+                    // A4 dimensions in mm: 210 x 297
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = pdf.internal.pageSize.getHeight();
+                    
+                    const canvasWidth = canvas.width;
+                    const canvasHeight = canvas.height;
+                    const canvasAspectRatio = canvasWidth / canvasHeight;
+                    
+                    let imgWidth = pdfWidth;
+                    let imgHeight = imgWidth / canvasAspectRatio;
+
+                    if (imgHeight > pdfHeight) {
+                        imgHeight = pdfHeight;
+                        imgWidth = imgHeight * canvasAspectRatio;
+                    }
+                    
+                    const x = (pdfWidth - imgWidth) / 2;
+                    const y = 0; // Align to top
+
+                    pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+                    pdf.save(`${invoiceId}.pdf`);
+                });
+            });
+            
+             // Download DOC
+            downloadDocBtn.addEventListener('click', () => {
+                const invoiceId = document.getElementById('invoice-id').value || 'invoice';
+                const previewHtml = document.getElementById('invoice-preview').innerHTML;
+                
+                const styles = `
+                    <style>
+                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
+                        table { width: 100%; border-collapse: collapse; }
+                        th, td { border: 1px solid #ddd; padding: 8px; }
+                        th { background-color: #f2f2f2; }
+                        .text-right { text-align: right; }
+                        .font-bold { font-weight: bold; }
+                        .text-2xl { font-size: 1.5rem; }
+                        /* Add other necessary styles from the preview here */
+                    </style>
+                `;
+
+                const content = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Invoice</title>
+                        ${styles}
+                    </head>
+                    <body>
+                        ${previewHtml}
+                    </body>
+                    </html>
+                `;
+                
+                const blob = new Blob(['\ufeff', content], {
+                    type: 'application/msword'
+                });
+                
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${invoiceId}.doc`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+
+
+            // --- INITIALIZATION ---
+            addInitialItem();
+            // Set default dates
+            const today = new Date();
+            document.getElementById('invoice-date').valueAsDate = today;
+            today.setDate(today.getDate() + 30); // Due in 30 days
+            document.getElementById('invoice-due-date').valueAsDate = today;
+            updatePreview();
+        });
+    </script>
+</body>
+</html>
+
+
